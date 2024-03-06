@@ -15,6 +15,8 @@ xfun::embed_file('01-introToSimulation.Rmd')
 
 ## Introduction to the Simulation-Based Approach
 
+Our research question concerns the hyperarticulation hypothesis of infant-directed speech. Do caregivers produce more peripheral vowels in infant-directed speech (IDS) compared to adult-directed speech (ADS)? To answer this question, we manually analysed 9267 extracted vowel tokens from individual caregivers' IDS and ADS. In order eliminate inter-individual differences in formant values that occur due to physiological characteristics, we first z-score-normalised the formant data according to participant and then computed the total area of each caregiver's ADS and IDS vowel space. We used this measure to calculate a standardised mean difference score: Cohen's d.
+
 Let's start by loading the required packages:
 
 ```{r setup, include=TRUE}
@@ -31,9 +33,19 @@ pacman::p_load(knitr, # rendering of .Rmd file
                viridis, # color schemes for visualisation
                kableExtra, #helps with knitting the .Rmd file
                cowplot, #visualisation tool to include multiple plots
-               MASS)
+               MASS,
+               ggrain)
 set.seed(1234)
 opts_chunk$set(tidy.opts=list(width.cutoff=60),tidy=TRUE, fig.width=12, fig.height=11, fig.fullwidth=TRUE)
+
+plot_theme <- 
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5, size = 18), 
+        legend.position = "none", 
+        axis.text.x = element_text(size = 13), 
+        axis.title.x = element_text(size = 13), 
+        axis.text.y = element_text(size = 12), 
+        axis.title.y = element_text(size = 13))
 ```
 
 Let's start with a straightforward example based on MB1. We are interested in the following question: To what extent do infants demonstrate longer looking times to infant-directed speech as opposed to adult-directed speech?
@@ -65,24 +77,24 @@ Although this model is incomplete, we can go ahead and choose parameters for �
 
 ```{r}
 # set fixed effect parameters
-beta_0 <- 800 # intercept; i.e., the grand mean
-beta_1 <-  50 # slope; i.e, effect of category
+beta_0 <- 0 # intercept; i.e., the grand mean
+beta_1 <- 0.35 # slope; i.e, effect of category
 ```
 
 The parameters 𝛽0 and 𝛽1 are fixed effects: they characterize the population of events in which a typical subject encounters a typical stimulus. Thus, we set the mean RT for a “typical” subject encountering a “typical” stimulus to 800 ms, and assume that responses are typically 50 ms slower for outgroup than ingroup faces.
 
 ```{r}
 # set random effect parameters
-tau_0   <- 100 # by-subject random intercept sd
-omega_0 <-  80 # by-item random intercept sd
+tau_0   <- 0.1 # by-subject random intercept sd
+omega_0 <- 0.05   # by-item random intercept sd
 ```
 
 
 ```{r}
 # set more random effect and error parameters
-tau_1  <-  40 # by-subject random slope sd
-rho    <-  .2 # correlation between intercept and slope
-sigma  <- 200 # residual (error) sd
+tau_1  <-  0.2 # by-subject random slope sd
+rho    <-  0.2 # correlation between intercept and slope
+sigma  <- 0.5 # residual (error) sd
 ```
 
 To summarize, we established a reasonable statistical model underlying the data having the form:
@@ -125,7 +137,7 @@ Let us introduce a numeric predictor to represent what category each stimulus it
 
 ```{r}
 # effect-code category
-items$X_i <- recode(items$category, "ingroup" = -0.5, "outgroup" = +0.5)
+items$X_i <- recode(items$category, "ADS" = -0.5, "IDS" = +0.5)
 ```
 
 In R, most regression procedures can handle two-level factors like category as predictor variables. By default, the procedure will create a new numeric predictor that codes one level of the factor as zero and the other as one. Why not just use the defaults? The short explanation is that the default of 0, 1 coding is not well-suited to the kinds of factorial experimental designs often found in psychology and related fields. For the current example, using the default coding for the 𝑋 predictor would change the interpretation of 𝛽0: instead of the grand mean, it would reflect the mean for the group coded as zero. One could change the default, but we feel it is better to be explicit in the code about what values are being used. See https://talklab.psy.gla.ac.uk/tvw/catpred for further discussion; see also the R mixed modeling package afex (Singmann et al. 2019), which provides better defaults for specifying categorical predictors in ANOVA-style designs.
@@ -163,7 +175,7 @@ Since all subjects respond to all items, we can set up a table of trials by maki
 # nrow(.) is the number of rows in the table
 trials <- crossing(subjects, items)  %>%
   mutate(e_si = rnorm(nrow(.), mean = 0, sd = sigma)) %>%
-  select(subj_id, item_id, category, X_i, everything())
+  dplyr::select(subj_id, item_id, category, X_i, everything())
 ```
 
 Calculate the response values
@@ -186,7 +198,7 @@ After this we will use dplyr::select() to keep the columns we need. Note that th
 # calculate the response variable
 dat_sim <- trials %>%
   mutate(RT = beta_0 + T_0s + O_0i + (beta_1 + T_1s) * X_i + e_si) %>%
-  select(subj_id, item_id, category, X_i, RT)
+  dplyr::select(subj_id, item_id, category, X_i, RT)
 ```
 
 
@@ -196,38 +208,40 @@ To make it easier to try out different parameters or to generate many datasets f
 ```{r}
 # set up the custom data simulation function
 my_sim_data <- function(
-  n_subj     = 100,   # number of subjects
-  n_ingroup  =  25,   # number of ingroup stimuli
-  n_outgroup =  25,   # number of outgroup stimuli
-  beta_0     = 800,   # grand mean
-  beta_1     =  50,   # effect of category
-  omega_0    =  80,   # by-item random intercept sd
-  tau_0      = 100,   # by-subject random intercept sd
-  tau_1      =  40,   # by-subject random slope sd
-  rho        = 0.2,   # correlation between intercept and slope
-  sigma      = 200) { # residual (standard deviation)
+  n_subj = 50,   # number of subjects
+  ADS_n  = 10,   # number of ingroup stimuli
+  IDS_n =  10,   # number of outgroup stimuli
+  beta_0 = 0,   # grand mean
+  beta_1 =  0.35,   # effect of category
+  omega_0 =  0.1,   # by-item random intercept sd
+  tau_0 = 0.1,   # by-subject random intercept sd
+  tau_1 =  0.06,   # by-subject random slope sd
+  rho = 0.2,   # correlation between intercept and slope
+  sigma = 0.5) { # residual (standard deviation)
 
   items <- data.frame(
-    item_id = seq_len(n_ingroup + n_outgroup),
-    category = rep(c("ingroup", "outgroup"), c(n_ingroup, n_outgroup)),
-    X_i = rep(c(-0.5, 0.5), c(n_ingroup, n_outgroup)),
-    O_0i = rnorm(n = n_ingroup + n_outgroup, mean = 0, sd = omega_0))
+    item_id = seq_len(ADS_n + IDS_n),
+    category = rep(c("ADS", "IDS"), c(ADS_n, IDS_n)),
+    category_contrast = rep(c(-0.5, 0.5), c(ADS_n, IDS_n)),
+    O_0i = rnorm(n = ADS_n + IDS_n, mean = 0, sd = omega_0))
 
-  # variance-covariance matrix
-  cov_mx  <- matrix(
-    c(tau_0^2,             rho * tau_0 * tau_1,
-      rho * tau_0 * tau_1, tau_1^2            ),
-    nrow = 2, byrow = TRUE)
+  # simulate a sample of subjects
 
-  subjects <- data.frame(subj_id = seq_len(n_subj),
-                         MASS::mvrnorm(n = n_subj,
-                                       mu = c(T_0s = 0, T_1s = 0),
-                                       Sigma = cov_mx))
+# sample from a multivariate random distribution 
+  subjects <- faux::rnorm_multi(
+  n = n_subj, 
+  mu = 0, # means for random effects are always 0
+  sd = c(tau_0, tau_1), # set SDs
+  r = rho, # set correlation, see ?faux::rnorm_multi
+  varnames = c("T_0s", "T_1s"))
+
+    # add subject IDs
+  subjects$subj_id <- seq_len(n_subj) 
 
   crossing(subjects, items) %>%
     mutate(e_si = rnorm(nrow(.), mean = 0, sd = sigma),
-           RT = beta_0 + T_0s + O_0i + (beta_1 + T_1s) * X_i + e_si) %>%
-    dplyr::select(subj_id, item_id, category, X_i, RT)
+           RT = beta_0 + T_0s + O_0i + (beta_1 + T_1s) * category_contrast + e_si) %>%
+    dplyr::select(subj_id, item_id, category, category_contrast, RT)
 }
 ```
 
@@ -253,22 +267,191 @@ The other arguments to the lme4 function are the name of the data frame where th
 -values are derived using the Satterthwaite approximation, for which the default estimation technique in lmer()—restricted likelihood estimation (REML = TRUE)—is the most appropriate (Luke 2017). Use the summary() function to view the results.
 
 ```{r}
-dat_sim <- my_sim_data(n_subj = 500, beta_1 = 0)
+dat_sim <- my_sim_data(n_subj = 30)
+
+dat_sim %>%
+  mutate(subj_id = as.factor(subj_id)) %>%
+  ggplot() +
+  geom_density_ridges(aes(y = reorder(subj_id, RT), x = RT, color = "black", fill = subj_id), show.legend = FALSE, quantile_lines = T, quantiles = c(0.025, 0.5, 0.975), alpha = 0.6, scale = 1.1) +
+  ggtitle('Intercept Variability by Subject') +
+  geom_vline(xintercept = 0, color = "black", size = 0.3, linetype = "dotted") +
+  xlab('DV') +
+  ylab('Subject ID') +
+  #facet_wrap(~category) +
+  scale_color_manual(values=c(viridis(n = 30))) +
+  scale_fill_manual(values=c(viridis(n = 30))) +
+  plot_theme
+
+dat_sim %>%
+  mutate(item_id = as.factor(item_id)) %>%
+  ggplot() +
+  geom_density_ridges(aes(y = reorder(item_id, RT), x = RT, color = "black", fill = item_id), show.legend = FALSE, quantile_lines = TRUE, quantiles = c(0.025, 0.5, 0.975), alpha = 0.6, scale = 1.1) +
+  ggtitle('Intercept Variability by Item') +
+  #geom_vline(xintercept = 800, color = "black", size = 0.3, linetype = "dotted") +
+  xlab('DV') +
+  ylab('Item ID') +
+  #facet_wrap(~category) +
+  scale_color_manual(values=c(viridis(n = 30))) +
+  scale_fill_manual(values=c(viridis(n = 30))) +
+  plot_theme
+```
+
+
+```{r}
+dat_sim <- my_sim_data(n_subj = 50)
+meanADSRT <- mean(filter(dat_sim, category == "ADS")$RT)
+
+dat_sim_plot <- dat_sim %>%
+  group_by(subj_id, category) %>%
+  dplyr::summarise(medRT = mean(RT)) %>%
+  dplyr::mutate(medRT = medRT - meanADSRT)
+
+dat_sim_plot %>%
+  group_by(category) %>%
+  dplyr::summarise(mean(medRT))
+
+ggplot(aes(x = category, y = medRT, fill = category), data = dat_sim_plot) + 
+  geom_rain(alpha = 0.8, rain.side = "f1x1", id.long.var = "subj_id", point.args.pos = list(position = position_jitter(width = 0.04, height = 0, seed = 42)), line.args.pos = list(position = position_jitter(width = 0.04, height = 0, seed = 42))) + 
+  scale_fill_manual(values = c("#FC4E07", "steelblue")) + 
+  ggtitle('Effect Size Differences across Speech Styles') + 
+  xlab("Speech Style") + 
+  ylab('Effect Sizes') + 
+  scale_color_manual(values = viridis(n = 27)) +
+  plot_theme
+```
+
+
+```{r}
 # fit a linear mixed-effects model to data
-mod_sim <- lmer(RT ~ 1 + X_i + (1 | item_id) + (1 + X_i | subj_id),
-                data = dat_sim)
+mod_sim <- lmer(RT ~ 1 + category_contrast + (1 | item_id) + (1 + category_contrast | subj_id), data = dat_sim)
 
 summary(mod_sim, corr = FALSE)
 ```
 
 
-ADD SECTION ON RUNNING 100s OF TIMES AND HOW TO INTERPRET THEM:
 
 ```{r}
+# simulate, analyze, and return a table of parameter estimates
+single_run <- function(...) {
+  # ... is a shortcut that forwards any arguments to 
+  # my_sim_data(), the function created above
+  dat_sim <- my_sim_data(...)
+  mod_sim <- lmer(RT ~ category_contrast + (1 | item_id) + (1 + category_contrast | subj_id),
+                dat_sim)
+  
+  broom.mixed::tidy(mod_sim)
+}
+single_run()
 
+# run one model with new parameters
+single_run(n_subj = 200, beta_1 = 0.1)
 
+# run simulations and save to a file
+n_runs <- 100 # use at least 1000 to get stable estimates
+sims <- purrr::map_df(1:n_runs, ~ single_run())
+write_csv(sims, "sims.csv")
 
+# read saved simulation data
+sims <- read_csv("sims.csv", col_types = cols(
+  # makes sure plots display in this order
+  group = col_factor(ordered = TRUE),
+  term = col_factor(ordered = TRUE)
+  ))
+
+sims %>%
+  filter(effect == "fixed") %>%
+  dplyr::select(term, estimate, p.value)
+
+# calculate mean estimates and power for specified alpha
+alpha <- 0.05
+
+sims %>% 
+  filter(effect == "fixed") %>%
+  group_by(term) %>%
+  dplyr::summarize(
+    mean_estimate = mean(estimate),
+    mean_se = mean(std.error),
+    power = mean(p.value < alpha),
+    .groups = "drop"
+  )
 ```
+
+
+Exercise 1: Let's explore the effect of repeated measures on power. Try to run a power analysis with each subject receiving two items and another power analysis with each subject receiving 15 items. What happens to the estimate of statistical power?
+
+Write your answer here:
+
+
+______________________________________________________________________________________________________________________
+
+
+
+Exercise 2: How would you add a positive effect of age as a predictor to the model (hint: it involves randomly sampling age for each child and adding an effect to the simulation code and model)?
+
+
+______________________________________________________________________________________________________________________
+
+
+
+```{r}
+# set up the custom data simulation function
+my_sim_data <- function(
+  n_subj = 50,   # number of subjects
+  ADS_n  = 10,   # number of ingroup stimuli
+  IDS_n =  10,   # number of outgroup stimuli
+  beta_0 = 0,   # grand mean
+  beta_1 =  0.35,   # effect of category
+  beta_as = 0.8,
+  subject_as = 0.05,
+  omega_0 =  0.1,   # by-item random intercept sd
+  tau_0 = 0.1,   # by-subject random intercept sd
+  tau_1 =  0.06,   # by-subject random slope sd
+  rho = 0.2,   # correlation between intercept and slope
+  sigma = 0.5) { # residual (standard deviation)
+
+  items <- data.frame(
+    item_id = seq_len(ADS_n + IDS_n),
+    category = rep(c("ADS", "IDS"), c(ADS_n, IDS_n)),
+    category_contrast = rep(c(-0.5, 0.5), c(ADS_n, IDS_n)),
+    O_0i = rnorm(n = ADS_n + IDS_n, mean = 0, sd = omega_0)) %>%
+    mutate(item_id = faux::make_id(nrow(.), "I"))
+
+  # simulate a sample of subjects
+
+# sample from a multivariate random distribution 
+  subjects <- faux::rnorm_multi(
+  n = n_subj, 
+  mu = 0, # means for random effects are always 0
+  sd = c(tau_0, tau_1, subject_as), # set SDs
+  r = rho, # set correlation, see ?faux::rnorm_multi
+  varnames = c("T_0s", "T_1s", "S_as")) %>%
+    mutate(subj_id = faux::make_id(nrow(.), "S")) %>%
+    mutate(X_a = runif(n_subj, min = -0.5, max = 0.5))
+#add subject age measure, sample from distribution from -0.5 to 0.5.
+  crossing(subjects, items) %>%
+    mutate(e_si = rnorm(nrow(.), mean = 0, sd = sigma),
+           RT = beta_0 + T_0s + O_0i + (beta_1 + T_1s) * category_contrast + ((beta_as + S_as) * X_a * category_contrast) + e_si) %>%
+    dplyr::select(subj_id, item_id, category, category_contrast, RT, X_a)
+}
+```
+
+```{r}
+dat_sim <- my_sim_data()
+
+dat_sim %>%
+ggplot() + 
+  geom_point(aes(y = RT, x = X_a, color = subj_id), position = "jitter", alpha = 0.6, size = 1) + 
+  geom_smooth(method = "lm", se = TRUE, formula = y ~ x, aes(y = RT, x = X_a)) +
+  ggtitle("Age") +
+  xlab("Age") + 
+  facet_wrap(~category_contrast) +
+  plot_theme
+
+dat_sim <- my_sim_data()
+mod_sim <- lmer(RT ~ 1 + category_contrast*X_a + (1 | item_id) + (1 + category_contrast | subj_id), data = dat_sim)
+summary(mod_sim, corr = FALSE)
+```
+
 
 
 Mixed-effects modeling is a powerful technique for analyzing data from complex designs. The technique is close to ideal for analyzing data with crossed random factors of subjects and stimuli: it gracefully and simultaneously accounts for subject and item variance within a single analysis, and outperforms traditional techniques in terms of type I error and power (Barr et al. 2013). However, this additional power comes at the price of technical complexity.
