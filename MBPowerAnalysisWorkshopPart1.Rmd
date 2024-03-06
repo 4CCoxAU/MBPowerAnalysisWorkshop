@@ -1,0 +1,12 @@
+---
+title: "ManyBabiesPowerAnalysisWorkshopPart1"
+author: "Chris Cox"
+date: "2024-03-06"
+output: pdf_document
+---
+
+```{r}
+
+
+```
+
