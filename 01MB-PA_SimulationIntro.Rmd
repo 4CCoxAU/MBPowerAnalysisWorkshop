@@ -7,15 +7,11 @@ editor_options:
   chunk_output_type: console
 ---
 
-# Simulating Data for Power Analysis Purposes
+# Introduction to Data Simulation
 
 ```{r, echo=FALSE}
 xfun::embed_file('01-introToSimulation.Rmd')
 ```
-
-## Introduction to the Simulation-Based Approach
-
-Our research question concerns the hyperarticulation hypothesis of infant-directed speech. Do caregivers produce more peripheral vowels in infant-directed speech (IDS) compared to adult-directed speech (ADS)? To answer this question, we manually analysed 9267 extracted vowel tokens from individual caregivers' IDS and ADS. In order eliminate inter-individual differences in formant values that occur due to physiological characteristics, we first z-score-normalised the formant data according to participant and then computed the total area of each caregiver's ADS and IDS vowel space. We used this measure to calculate a standardised mean difference score: Cohen's d.
 
 Let's start by loading the required packages:
 
@@ -48,107 +44,110 @@ plot_theme <-
         axis.title.y = element_text(size = 13))
 ```
 
-Let's start with a straightforward example based on MB1. We are interested in the following question: To what extent do infants demonstrate longer looking times to infant-directed speech as opposed to adult-directed speech?
+Let's start with a straightforward example based on MB1. We are interested in the following question: To what extent do infants demonstrate longer looking times to infant-directed speech as opposed to adult-directed speech? We know that a linear mixed-effects model is an appropriate modelling strategy, so we want to conduct a power analysis with this in mind.
 
-It is easy tot start thinking that the number of subjects and the effect size are the most important factors, or even the only factors, that affect power. Although effect size is often the largest contributor to power, saying it is the only important issue is far from the truth.  There are at least a dozen other factors that can influence the power of a study, and many of these factors should be considered not only from the perspective of doing a power analysis, but also as part of doing good research.  The first couple of factors that we will discuss are more “mechanical” ways of increasing power (e.g., alpha level, sample size and effect size). After that, the discussion will turn to more methodological issues that affect power.
+To give an overview of the simulation task, we will simulate data from a design with crossed random factors of subjects and stimuli, fit a model to the simulated data, and then see whether the resulting sample estimates are similar to the population values we specified when simulating the data. In this study, infant participants are exposed to recordings of infant-directed and adult-directed speech, and we use their looking times as the primary dependent variable. The key question is whether there is any behavioural differences within each participants according to the type of stimulus.
 
-To give an overview of the simulation task, we will simulate data from a design with crossed random factors of subjects and stimuli, fit a model to the simulated data, and then see whether the resulting sample estimates are similar to the population values we specified when simulating the data. In this hypothetical study, subjects classify the emotional expressions of faces as quickly as possible, and we use their response time as the primary dependent variable. Let’s imagine that the faces are of two types: either from the subject’s ingroup or from an outgroup. For simplicity, we further assume that each face appears only once in the stimulus set. The key question is whether there is any difference in classification speed across the type of face.
 
 ## Establishing the data-generating parameters
 
-The first thing to do is to set up the parameters that govern the process we assume to give rise to the data, the data-generating process or DGP. Let’s start by defining the sample size: In this hypothetical study, each of 100 subjects will respond to all 50 stimulus items (25 ingroup and 25 outgroup), for a total of 5000 observations.
+The first thing to do is to set up the parameters that govern the process we assume to give rise to the data: the data-generating process. Let's start by defining the number of stimulus items that each infant participant will be exposed to. Because infants are not the most patient of participants, perhaps a realistic study design would allow researchers to expose infants to 8 recordings of IDS and 8 recordings of ADS. Let's say that a realistic sample size for our laboratory would be around 25 participants. This implies a total of 400 obsevations in this study (i.e., 8 + 8 recording stimuli for each of the 25 children). This is a within-subjects, between-items study; that is, each and every subject receives both IDS and ADS stimuli (within-subject), but each stimulus is either IDS or ADS (between-items).
 
-Note that for independent variables in designs where subjects and stimuli are crossed, you can’t think of factors as being solely “within” or “between” because we have two sampling units; you must ask not only whether independent variables are within- or between- subjects, but also whether they are within- or between- stimulus items. Recall that a within-subjects factor is one where each and every subject receives all of the levels, and a between-subjects factors is one where each subject receives only one of the levels. Likewise, a within-items factor is one for which each stimulus receives all of the levels. For our current example, the ingroup/outgroup factor (category) is within subjects but between items, given that each stimulus item is either ingroup or outgroup.
+Now that we have an overview of a dataset that would make sense for our experimental design, let's start to make some realistic and informed choices for parameters that would make sense to build a statistical model. In the following sections, we will build up the parameters for a mixed-effects statistical model of the following type, as described in the lecture:
 
-Now that we have an appropriate structure for our simulated dataset, we need to generate the RT values. For this, we need to establish an underlying statistical model. In this and the next section, we will build up a statistical model step by step, defining variables in the code as we go along that reflect our choices for parameters. For convenience, Table @ref(tab:paramdef) lists all of the variables in the statistical model and their associated variable names in the code.
+DV = β₀ + β₁ * SpeechStyle + u₀ⱼ^(item) + u₀ᵢ^(subj) + (u₁ᵢ^(subj) * SpeechStyle) + ε 
 
-Let us start with a basic model and build up from there. We want a model of RT for subject 𝑠 and item 𝑖
+According to this formula, the dependent variable for each subject and item is defined as sum of an intercept term 𝛽0, which in this example is the grand mean reaction time for the population of stimuli, plus 𝛽1, the mean RT difference ADS and IDS stimuli, plus random noise. To make 𝛽0 equal the grand mean and 𝛽1 equal the mean IDS minus the mean ADS RT, we will code the SpeechStyle category variable -0.5 for ADS and +0.5 for IDS.
 
-that looks something like:
-
-𝑅𝑇𝑠𝑖=𝛽0+𝛽1𝑋𝑖+𝑒𝑠𝑖.
-
-According to the formula, response 𝑅𝑇𝑠𝑖for subject 𝑠 and item 𝑖 is defined as sum of an intercept term 𝛽0, which in this example is the grand mean reaction time for the population of stimuli, plus 𝛽1, the mean RT difference between ingroup and outgroup stimuli, plus random noise 𝑒𝑠𝑖. To make 𝛽0 equal the grand mean and 𝛽1 equal the mean outgroup minus the mean ingroup RT, we will code the item category variable 𝑋𝑖as -.5 for the ingroup category and +.5 for the outgroup category.
-
-In the model formula, we use Greek letters (𝛽0
-, 𝛽1) to represent population parameters that are being directly estimated by the model. In contrast, Roman letters represent the remaining variables: observed variables whose values are determined by sampling (e.g., 𝑅𝑇𝑠𝑖, 𝑇0𝑠, 𝑒𝑠𝑖) or fixed by the experiment design (𝑋𝑖).
-
-Although this model is incomplete, we can go ahead and choose parameters for 𝛽0 and 𝛽1. For this example, we set a grand mean of 800 ms and a mean difference of 50 ms. You will need to use disciplinary expertise and/or pilot data to choose these parameters; by the end of this tutorial you will understand how to extract those parameters from an analysis.
-
-```{r}
-# set fixed effect parameters
-beta_0 <- 0 # intercept; i.e., the grand mean
-beta_1 <- 0.35 # slope; i.e, effect of category
-```
-
-The parameters 𝛽0 and 𝛽1 are fixed effects: they characterize the population of events in which a typical subject encounters a typical stimulus. Thus, we set the mean RT for a “typical” subject encountering a “typical” stimulus to 800 ms, and assume that responses are typically 50 ms slower for outgroup than ingroup faces.
-
-```{r}
-# set random effect parameters
-tau_0   <- 0.1 # by-subject random intercept sd
-omega_0 <- 0.05   # by-item random intercept sd
-```
-
-
-```{r}
-# set more random effect and error parameters
-tau_1  <-  0.2 # by-subject random slope sd
-rho    <-  0.2 # correlation between intercept and slope
-sigma  <- 0.5 # residual (error) sd
-```
+The parameters 𝛽0 and 𝛽1 are fixed effects: they characterize the population of events in which a typical subject encounters a typical stimulus. Thus, we set the mean RT for a “typical” infant participant encountering a “typical” stimulus to 800 ms, and assume that looking times are typically 2000ms longer for IDS as opposed to ADS.
 
 To summarize, we established a reasonable statistical model underlying the data having the form:
 
-𝑅𝑇𝑠𝑖=𝛽0+𝑇0𝑠+𝑂0𝑖+(𝛽1+𝑇1𝑠)𝑋𝑖+𝑒𝑠𝑖
+The response time for subject 𝑠on item 𝑖, 𝑅𝑇𝑠𝑖, is decomposed into a population grand mean 𝛽0, a by-subject random intercept 𝑇0𝑠, a by-item random intercept 𝑂0𝑖, a fixed slope 𝛽1, a by-subject random slope 𝑇1𝑠, and a trial-level residual 𝑒𝑠𝑖. Our data-generating process is fully determined by seven population parameters, all denoted by Greek letters: 𝛽0, 𝛽1, 𝜏0, 𝜏1, 𝜌, 𝜔0, and 𝜎. In the next section we will apply this data-generating process to simulate the sampling of subjects, items, and trials (encounters).
 
-The response time for subject 𝑠
-on item 𝑖, 𝑅𝑇𝑠𝑖, is decomposed into a population grand mean 𝛽0, a by-subject random intercept 𝑇0𝑠, a by-item random intercept 𝑂0𝑖, a fixed slope 𝛽1, a by-subject random slope 𝑇1𝑠, and a trial-level residual 𝑒𝑠𝑖. Our data-generating process is fully determined by seven population parameters, all denoted by Greek letters: 𝛽0, 𝛽1, 𝜏0, 𝜏1, 𝜌, 𝜔0, and 𝜎(see Table @ref(tab:paramdef)). In the next section we will apply this data-generating process to simulate the sampling of subjects, items, and trials (encounters).
+The output of the above function tells us that we now have three sources of variation in the model:
 
-Simulating the sampling process
+* the usual standard deviation of the residuals (i.e., ‘sigma’),
+* the standard deviation of the population of by-subject varying intercepts (i.e., ‘Intercept’), and
+* the standard deviation of the population of by-subject varying slopes (i.e., ‘RegisterIDS’).
 
-Let’s first define parameters related to the number of observations. In this example, we will simulate data from 100 subjects responding to 25 ingroup faces and 25 outgroup faces. There are no between-subject factors, so we can set n_subj to 100. We set n_ingroup and n_outgroup to the number of stimulus items in each condition.
+The latter two sources of variation provide one of the most essential features of multi-level models: partial pooling, as we discussed in the lecture. 
+
+According to the formula, response 𝑅𝑇𝑠𝑖for subject 𝑠 and item 𝑖 is defined as sum of an intercept term 𝛽0, which in this example is the grand mean reaction time for the population of stimuli, plus 𝛽1, the mean RT difference between ingroup and outgroup stimuli, plus random noise 𝑒𝑠𝑖. To make 𝛽0 equal the grand mean and 𝛽1 equal the mean outgroup minus the mean ingroup RT, we will code the item category variable 𝑋𝑖as -.5 for the ingroup category and +.5 for the outgroup category.
+
+Now that we have an appropriate structure for our simulated dataset, we need to generate the RT values. For this, we need to establish an underlying statistical model. In this and the next section, we will build up a statistical model step by step, defining variables in the code as we go along that reflect our choices for parameters. For convenience, Table @ref(tab:paramdef) lists all of the variables in the statistical model and their associated variable names in the code.
+
+Let us start with a basic model and build up from there. We want a model of RT for subject 𝑠 and item 𝑖that looks something like:
+
+In the model formula, we use Greek letters (𝛽0, 𝛽1) to represent population parameters that are being directly estimated by the model. In contrast, Roman letters represent the remaining variables: observed variables whose values are determined by sampling (e.g., 𝑅𝑇𝑠𝑖, 𝑇0𝑠, 𝑒𝑠𝑖) or fixed by the experiment design (𝑋𝑖).
+
+Although this model is incomplete, we can go ahead and choose parameters for 𝛽0 and 𝛽1. For this example, we set a grand mean of 800 ms and a mean difference of 50 ms. You will need to use disciplinary expertise and/or pilot data to choose these parameters; by the end of this tutorial you will understand how to extract those parameters from an analysis.
+
+Let's start by setting the fixed-effects parameters; that is, the overall intercept (ADS) and the effect of speech style (IDS). We can be informed about these choices from what we know about looking times in infant expperiments. We could imagine a looking time of around 9 seconds (i.e., 9000ms) for ADS stimuli and for infants to exhibit longer looking times towards IDS stimuli, maybe around 11 seconds (i.e., 11000 ms), or 2000 ms longer looking times than that to ADS. Let's code this explicitly as parameter values in for our simulation:
+
+```{r}
+# set fixed effect parameters
+beta_0 <- 9000 # intercept; i.e., the grand mean, ADS 
+beta_1 <- 2000 # slope; i.e, effect of IDS 
+```
+
+We also need to add some variability around these values, as we can't expect each and every infant in the experiment to have exactly the same baseline reaction to the ADS stimuli, and we can't expect each stimulus to have exactly the same effect. We would expect variability in both subject reactions and item effects. Let's code this as standard deviation of by-subject random intercept and by-item random intercept sd.
+
+```{r}
+# set random effect parameters
+tau_0   <- 3000 # by-subject random intercept sd
+omega_0 <- 1000   # by-item random intercept sd
+```
+
+We also can't expect the effect of IDS stimuli to be the same for every infant; that is, some infants' attention may be more grabbed by IDS stimuli than others, and we therefore need to add subject-specific variability for the effect of IDS on looking times. Let's code this as the tau_1 parameter. Here we can also add a crucial component of multi-level models, which is the correlation matrix. There may be patterns in the data between those infants who have a high looking time baseline in ADS and the effects of IDS, and we therefore have to add a correlation matrix to account for these patterns. Here, we specify that there is a weak correlation between the varying intercepts and varying slopes of infant participants. We also need a residual error term to capture unexplained sources of variability:
+
+```{r}
+# set more random effect and error parameters
+tau_1  <-  1000 # by-subject random slope sd
+rho    <-  0.2 # correlation between intercept and slope
+sigma  <- 500 # residual (error) sd
+```
+
+## Define parameters for observations
+
+Now that we have our initial parameters in place, it's time to start defining parameters related to the number of observations. In this example, we will simulate data from a typical IDS preference experiment, with 24 infants responding to 8 
+
+20 subjects responding to 25 ingroup faces and 25 outgroup faces. There are no between-subject factors, so we can set n_subj to 100. We set n_ingroup and n_outgroup to the number of stimulus items in each condition.
 
 ```{r}
 # set number of subjects and items
-n_subj     <- 100 # number of subjects
-n_ingroup  <-  25 # number of ingroup stimuli
-n_outgroup <-  25 # number of outgroup stimuli
+n_subj     <- 24 # number of subjects
+n_ADS  <-  8 # number of ADS stimuli
+n_IDS <-  8 # number of IDS stimuli
 ```
 
 
-Simulate the sampling of stimulus items
+## Simulate the sampling of stimulus items
 
-We need to create a table listing each item 𝑖, which category it is in, and its random effect 𝑂0𝑖.
+Now it's time to create a dataset that lists each item, which speech style it is in and its varying properties. Note that the code refers back to the omega_0 parameter that we specified above for the varying item intercept. For the varying item variable, we are going to use the faux package to assign a unique identifer to each of the 16 speech stimuli and designate whether the stimuli are ADS or IDS, with the first 8 being ADS and the next 8 being IDS. We sample the values of 𝑂0𝑖 from a normal distribution using the rnorm() function, with a mean of 0 and SD of 𝜔0.
 
 ```{r}
 # simulate a sample of items
-# total number of items = n_ingroup + n_outgroup
+# total number of items = n_ADS + n_IDS
 items <- data.frame(
-  item_id = seq_len(n_ingroup + n_outgroup),
-  category = rep(c("IDS", "ADS"), c(n_ingroup, n_outgroup)),
-  O_0i = rnorm(n = n_ingroup + n_outgroup, mean = 0, sd = omega_0)
-)
+  #item_id = seq_len(n_ADS + n_IDS),
+  Register = rep(c("IDS", "ADS"), c(n_ADS, n_IDS)),
+  O_0i = rnorm(n = n_ADS + n_IDS, mean = 0, sd = omega_0)
+) %>% 
+  mutate(item_id = faux::make_id(nrow(.), "I")) %>%
+  mutate(SpeechStyle = recode(Register, "ADS" = -0.5, "IDS" = +0.5))
+
+#let's have a look at what this has produced:
+glimpse(items)
 ```
 
+Let us introduce a numeric predictor to represent what category each stimulus item 𝑖 appears in (i.e., for the 𝑋𝑖 in our model). Since we predict that looking times to ADS stimuli will be shorter than IDS stimuli, we set ADS to be -0.5 and IDS to be +0.5. This is what is known as contrast coding, and we will later multiply this effect-coded factor by the fixed effect of category to simulate data where the ADS stimuli on average generate looking times of -1000 ms different from the grand mean, while the IDS stimuli are on average 1000 ms different from the grand mean.
 
-For the first variable in the dataset, item_id, we have used seq_len() to assign a unique integer to each of the 50 stimulus faces; these IDs function like names. The category variable designates whether the face is ingroup or outgroup, with the first 25 items being ingroup and the last 25 being outgroup. Finally, we sample the values of 𝑂0𝑖 from a normal distribution using the rnorm() function, with a mean of 0 and SD of 𝜔0.
+In R, most regression procedures can handle two-level factors like category as predictor variables. By default, the procedure will create a new numeric predictor that codes one level of the factor as zero and the other as one. Why not just use the defaults? The short explanation is that the default of 0, 1 coding is not well-suited to the kinds of factorial experimental designs often found in psychology and related fields. For the current example, using the default coding for the 𝑋 predictor would change the interpretation of 𝛽0: instead of the grand mean, it would reflect the mean for the group coded as zero. One could change the default, but we feel it is better to be explicit in the code about what values are being used. 
 
-Let us introduce a numeric predictor to represent what category each stimulus item 𝑖 appears in (i.e., for the 𝑋𝑖 in our model). Since we predict that responses to ingroup faces will be faster than outgroup faces, we set ingroup to -0.5 and outgroup to +0.5. We will later multiply this effect coded factor by the fixed effect of category (beta_1 = 50) to simulate data where the ingroup faces are on average -25 ms different from the grand mean, while the outgroup faces are on average 25 ms different from the grand mean. After adding this variable, the resulting table items should look like Table @ref(tab:items-table), although the specific values you obtain for 𝑂0𝑖 may differ, depending on whether you set the random seed.
+## Simulate the sampling of subjects
 
-```{r}
-# effect-code category
-items$X_i <- recode(items$category, "ADS" = -0.5, "IDS" = +0.5)
-```
-
-In R, most regression procedures can handle two-level factors like category as predictor variables. By default, the procedure will create a new numeric predictor that codes one level of the factor as zero and the other as one. Why not just use the defaults? The short explanation is that the default of 0, 1 coding is not well-suited to the kinds of factorial experimental designs often found in psychology and related fields. For the current example, using the default coding for the 𝑋 predictor would change the interpretation of 𝛽0: instead of the grand mean, it would reflect the mean for the group coded as zero. One could change the default, but we feel it is better to be explicit in the code about what values are being used. See https://talklab.psy.gla.ac.uk/tvw/catpred for further discussion; see also the R mixed modeling package afex (Singmann et al. 2019), which provides better defaults for specifying categorical predictors in ANOVA-style designs.
-
-Now we will simulate the sampling of individual subjects, resulting in a table listing each subject and their two correlated random effects. This will be slightly more complicated that what we just did, because we cannot simply sample the 𝑇0𝑠 values from a univariate distribution using rnorm() independently from the 𝑇1𝑠 values. Instead, we must sample ⟨𝑇0𝑠,𝑇1𝑠⟩ pairs—one pair for each subject—from a bivariate normal distribution. To do this, we will use the mvrnorm() function, a multivariate version of rnorm() from the MASS package that comes pre-installed with R. We specify the three parameters describing this distribution—two variances and a correlation—by entering them into a 2x2 variance-covariance matrix using the matrix() function, and then passing this matrix to mvrnorm() using the Sigma argument. This requires converting the standard deviations into variances (by squaring them) and calculating the covariance, which is the product of the correlation and two standard deviations, i.e., 𝜌×𝜏0×𝜏1
-
-.
-
-We only need this one function from MASS, so we can call it directly using the package::function() syntax instead of loading the library (specifically, MASS::mvrnorm() instead of library(MASS)). The resulting table subjects should have the structure shown in Table @ref(tab:subj-table).
-
-An alternative way to sample from a bivariate distribution would be to use the function rnorm_multi() from the faux package (DeBruine 2020), which generates a table of n simulated values from a multivariate normal distribution by specifying the means (mu) and standard deviations (sd) of each variable, plus the correlations (r), which can be either a single value (applied to all pairs), a correlation matrix, or a vector of the values in the upper right triangle of the correlation matrix.
+Now we will simulate the sampling of individual subjects, resulting in a table listing each subject and their two correlated varying effects (i.e., intercepts and slopes). This will be slightly more complicated that what we just did, because we cannot simply sample the 𝑇0𝑠 values from a univariate distribution using rnorm() independently from the 𝑇1𝑠 values. Instead, we must sample ⟨𝑇0𝑠,𝑇1𝑠⟩ pairs — one pair for each subject—from a bivariate normal distribution. One way to sample from a bivariate distribution would be to use the function rnorm_multi() from the faux package (DeBruine 2020), which generates a table of n simulated values from a multivariate normal distribution by specifying the means (mu) and standard deviations (sd) of each variable, plus the correlations (r), which can be either a single value (applied to all pairs), a correlation matrix, or a vector of the values in the upper right triangle of the correlation matrix.
 
 ```{r}
 # simulate a sample of subjects
@@ -160,70 +159,89 @@ subjects <- faux::rnorm_multi(
   sd = c(tau_0, tau_1), # set SDs
   r = rho, # set correlation, see ?faux::rnorm_multi
   varnames = c("T_0s", "T_1s")
-)
+) %>%
+  mutate(subj_id = faux::make_id(nrow(.), "S"))
 
-# add subject IDs
-subjects$subj_id <- seq_len(n_subj)
 ```
 
-Simulate trials (encounters)
+## Simulate trials (encounters)
 
-Since all subjects respond to all items, we can set up a table of trials by making a table with every possible combination of the rows in the subject and item tables using the tidyverse function crossing(). Each trial has random error associated with it, reflecting fluctuations in trial-by-trial performance due to unknown factors; we simulate this by sampling values from a normal distribution with a mean of 0 and SD of sigma. The resulting table should correspond to Table @ref(tab:trials-table).
+Since all subjects respond to all items, we can set up a table of trials by making a table with every possible combination of the rows in the subject and item tables using the tidyverse function crossing(). Each trial has random error associated with it, reflecting fluctuations in trial-by-trial performance due to unknown factors; we simulate this by sampling values from a normal distribution with a mean of 0 and SD of sigma.
 
 ```{r}
 # cross subject and item IDs; add an error term
 # nrow(.) is the number of rows in the table
-trials <- crossing(subjects, items)  %>%
+ParameterValues <- crossing(subjects, items)  %>%
   mutate(e_si = rnorm(nrow(.), mean = 0, sd = sigma)) %>%
-  dplyr::select(subj_id, item_id, category, X_i, everything())
+  dplyr::select(subj_id, item_id, Register, SpeechStyle, everything())
 ```
 
-Calculate the response values
+## Adding it all together
 
-With this resulting table, in combination with the constants beta_0 and beta_1, we have the full set of values that we need to compute the response variable RT according to the linear model we defined above:
+Now we have specified the parameters in ParameterValues, we are ready to add up everything together to create the response variable (i.e., infant looking times in milliseconds). To be more specific, we calculate the response variable, looking time, by adding together:
 
-𝑅𝑇𝑠𝑖=𝛽0+𝑇0𝑠+𝑂0𝑖+(𝛽1+𝑇1𝑠)𝑋𝑖+𝑒𝑠𝑖
+* the grand intercept (beta_0),
+* each subject-specific random intercept (T_0s),
+* each item-specific random intercept (O_0i),
+* each sum of the category effect (beta_1) and the random slope (T_1s), multiplied by the numeric predictor (SpeechStyle), and
+* each residual error (e_si).
 
-Thus, we calculate the response variable RT by adding together:
-
-    the grand intercept (beta_0),
-    each subject-specific random intercept (T_0s),
-    each item-specific random intercept (O_0i),
-    each sum of the category effect (beta_1) and the random slope (T_1s), multiplied by the numeric predictor (X_i), and
-    each residual error (e_si).
-
-After this we will use dplyr::select() to keep the columns we need. Note that the resulting table (Table @ref(tab:dat-sim-table)) has the structure that we set as our goal at the start of this exercise, with the additional column X_i, which we will keep to use in the estimation process, described in the next section.
+After this we will use dplyr::select() to keep the columns we need. This will create the structure that we set as our goal at the start of this exercise, with the additional column SpeechStyle, which we will keep to use in the estimation process, described in the next section.
 
 ```{r}
 # calculate the response variable
-dat_sim <- trials %>%
-  mutate(RT = beta_0 + T_0s + O_0i + (beta_1 + T_1s) * X_i + e_si) %>%
-  dplyr::select(subj_id, item_id, category, X_i, RT)
+dat_sim <- ParameterValues %>%
+  mutate(LT = beta_0 + T_0s + O_0i + (beta_1 + T_1s) * SpeechStyle + e_si) %>%
+  mutate(LT = LT + rexp(nrow(.), rate = 0.0003)) %>%
+  dplyr::select(subj_id, item_id, Register, SpeechStyle, LT)
+```
+
+Let's have a look at what the data we have generated looks like:
+
+```{r}
+dat_sim %>%
+  ggplot() +
+  geom_density(aes(x = LT, fill = as.factor(SpeechStyle)), alpha = 0.3) +
+  xlim(c(-5000, 40000)) +
+  plot_theme
+
+dat_sim_plot <- dat_sim %>%
+  group_by(subj_id, Register) %>%
+  dplyr::summarise(medLT = mean(LT))
+
+ggplot(aes(x = Register, y = LT, fill = Register), data = dat_sim) + 
+  geom_rain(alpha = 0.8, rain.side = "f1x1", id.long.var = "subj_id", point.args.pos = list(position = position_jitter(width = 0.04, height = 0, seed = 42)), line.args.pos = list(position = position_jitter(width = 0.04, height = 0, seed = 42))) + 
+  scale_fill_manual(values = c("#FC4E07", "steelblue")) + 
+  ggtitle('Looking Time Differences across Speech Styles') + 
+  xlab("Speech Style") + 
+  ylab('Looking Time (ms)') + 
+  scale_color_manual(values = viridis(n = 27)) +
+  plot_theme
 ```
 
 
-To make it easier to try out different parameters or to generate many datasets for the purpose of power analysis, you can put all of the code above into a custom function. Set up the function to take all of the parameters we set above as arguments. We’ll set the defaults to the values we used, but you can choose your own defaults. The code below is just all of the code above, condensed a bit. It returns one dataset with the parameters you specified.
-
+Wonderful, so now we have simulated the dataset with relevant properties that we can use to in sophisticated linear mixed effects models! To make it easier to try out different parameters or to generate many datasets for the purpose of power analysis, we can put all of the code above into a custom function. Set up the function to take all of the parameters we set above as arguments. We’ll set the defaults to the values we used, but you can choose your own defaults. The code below is just all of the code above, condensed a bit. It returns one dataset with the parameters we specified.
 
 ```{r}
 # set up the custom data simulation function
-my_sim_data <- function(
-  n_subj = 50,   # number of subjects
-  ADS_n  = 10,   # number of ingroup stimuli
-  IDS_n =  10,   # number of outgroup stimuli
-  beta_0 = 0,   # grand mean
-  beta_1 =  0.35,   # effect of category
-  omega_0 =  0.1,   # by-item random intercept sd
-  tau_0 = 0.1,   # by-subject random intercept sd
-  tau_1 =  0.06,   # by-subject random slope sd
+SimulateData <- function(
+  n_subj = 24,   # number of subjects
+  ADS_n  = 8,   # number of ingroup stimuli
+  IDS_n =  8,   # number of outgroup stimuli
+  beta_0 = 9000,   # grand mean
+  beta_1 =  2000,   # effect of category
+  omega_0 =  1000,   # by-item random intercept sd
+  tau_0 = 3000,   # by-subject random intercept sd
+  tau_1 =  1000,   # by-subject random slope sd
   rho = 0.2,   # correlation between intercept and slope
-  sigma = 0.5) { # residual (standard deviation)
+  sigma = 500) { # residual (standard deviation)
 
   items <- data.frame(
-    item_id = seq_len(ADS_n + IDS_n),
-    category = rep(c("ADS", "IDS"), c(ADS_n, IDS_n)),
-    category_contrast = rep(c(-0.5, 0.5), c(ADS_n, IDS_n)),
-    O_0i = rnorm(n = ADS_n + IDS_n, mean = 0, sd = omega_0))
+  #item_id = seq_len(n_ADS + n_IDS),
+  Register = rep(c("IDS", "ADS"), c(n_ADS, n_IDS)),
+  O_0i = rnorm(n = n_ADS + n_IDS, mean = 0, sd = omega_0)) %>% 
+  mutate(item_id = faux::make_id(nrow(.), "I")) %>%
+  mutate(SpeechStyle = recode(Register, "ADS" = -0.5, "IDS" = +0.5))
 
   # simulate a sample of subjects
 
@@ -233,19 +251,39 @@ my_sim_data <- function(
   mu = 0, # means for random effects are always 0
   sd = c(tau_0, tau_1), # set SDs
   r = rho, # set correlation, see ?faux::rnorm_multi
-  varnames = c("T_0s", "T_1s"))
+  varnames = c("T_0s", "T_1s")
+) %>%
+  mutate(subj_id = faux::make_id(nrow(.), "S"))
 
-    # add subject IDs
-  subjects$subj_id <- seq_len(n_subj) 
-
-  crossing(subjects, items) %>%
-    mutate(e_si = rnorm(nrow(.), mean = 0, sd = sigma),
-           RT = beta_0 + T_0s + O_0i + (beta_1 + T_1s) * category_contrast + e_si) %>%
-    dplyr::select(subj_id, item_id, category, category_contrast, RT)
+  ParameterValues <- crossing(subjects, items)  %>%
+    mutate(e_si = rnorm(nrow(.), mean = 0, sd = sigma)) %>%
+    dplyr::select(subj_id, item_id, Register, SpeechStyle, everything())
+  
+  dat_sim <- ParameterValues %>%
+    mutate(LT = beta_0 + T_0s + O_0i + (beta_1 + T_1s) * SpeechStyle + e_si) %>%
+    mutate(LT = LT + rexp(nrow(.), rate = 0.0003)) %>%
+    dplyr::select(subj_id, item_id, Register, SpeechStyle, LT)
 }
 ```
 
-Now you can generate a dataset with the default parameters using my_sim_data() or, for example, a dataset with 500 subjects and no effect of category using my_sim_data(n_subj = 500, beta_1 = 0).
+Now we can generate a dataset with the default parameters using my_sim_data() or, for example, a dataset with 500 subjects and no effect of category using my_sim_data(n_subj = 500, beta_1 = 0).
+
+```{r}
+data <- SimulateData(n_subj = 500, beta_1 = 0)
+
+dat_sim_plot <- data %>%
+  group_by(subj_id, Register) %>%
+  dplyr::summarise(medLT = mean(LT))
+
+ggplot(aes(x = Register, y = LT, fill = Register), data = dat_sim) + 
+  geom_rain(alpha = 0.8, rain.side = "f1x1", id.long.var = "subj_id", point.args.pos = list(position = position_jitter(width = 0.04, height = 0, seed = 42)), line.args.pos = list(position = position_jitter(width = 0.04, height = 0, seed = 42))) + 
+  scale_fill_manual(values = c("#FC4E07", "steelblue")) + 
+  ggtitle('Looking Time Differences across Speech Styles') + 
+  xlab("Speech Style") + 
+  ylab('Looking Time (ms)') + 
+  scale_color_manual(values = viridis(n = 27)) +
+  plot_theme
+```
 
 RT ~ 1 + X_i + (1 | item_id) + (1 + X_i | subj_id)
 
@@ -301,23 +339,6 @@ dat_sim %>%
 dat_sim <- my_sim_data(n_subj = 50)
 meanADSRT <- mean(filter(dat_sim, category == "ADS")$RT)
 
-dat_sim_plot <- dat_sim %>%
-  group_by(subj_id, category) %>%
-  dplyr::summarise(medRT = mean(RT)) %>%
-  dplyr::mutate(medRT = medRT - meanADSRT)
-
-dat_sim_plot %>%
-  group_by(category) %>%
-  dplyr::summarise(mean(medRT))
-
-ggplot(aes(x = category, y = medRT, fill = category), data = dat_sim_plot) + 
-  geom_rain(alpha = 0.8, rain.side = "f1x1", id.long.var = "subj_id", point.args.pos = list(position = position_jitter(width = 0.04, height = 0, seed = 42)), line.args.pos = list(position = position_jitter(width = 0.04, height = 0, seed = 42))) + 
-  scale_fill_manual(values = c("#FC4E07", "steelblue")) + 
-  ggtitle('Effect Size Differences across Speech Styles') + 
-  xlab("Speech Style") + 
-  ylab('Effect Sizes') + 
-  scale_color_manual(values = viridis(n = 27)) +
-  plot_theme
 ```
 
 
@@ -386,7 +407,7 @@ ________________________________________________________________________________
 
 
 
-Exercise 2: How would you add a positive effect of age as a predictor to the model (hint: it involves randomly sampling age for each child and adding an effect to the simulation code and model)?
+Exercise 2: How would you add a positive effect of (cross-sectional) age as a predictor to the model (hint: it involves randomly sampling age for each child and adding an effect to the simulation code and model)?
 
 
 ______________________________________________________________________________________________________________________
@@ -453,9 +474,92 @@ summary(mod_sim, corr = FALSE)
 ```
 
 
-
 Mixed-effects modeling is a powerful technique for analyzing data from complex designs. The technique is close to ideal for analyzing data with crossed random factors of subjects and stimuli: it gracefully and simultaneously accounts for subject and item variance within a single analysis, and outperforms traditional techniques in terms of type I error and power (Barr et al. 2013). However, this additional power comes at the price of technical complexity.
 
 Here we only considered a design with a normally distributed response variable. However, generalised linear mixed effect models allow for response variables with different distributions, such as binomial. Our supplemental online materials (https://osf.io/3cz2e/) illustrate the differences in simulation required for the study design in this paper with a binomial accuracy score (correct/incorrect) as the response variable.
+
+
+```{r}
+# Set parameters for the ex-Gaussian distribution
+mu <- 500  # Mean of the Gaussian component
+sigma <- 50  # Standard deviation of the Gaussian component
+lambda <- 0.001  # Rate parameter of the exponential component
+
+# Number of samples to generate
+n <- 1000
+
+# Generate random numbers from a Gaussian distribution
+gaussian_part <- rnorm(n, mean = mu, sd = sigma)
+
+# Generate random numbers from an exponential distribution
+exponential_part <- rexp(n, rate = lambda)
+
+# Combine the two distributions to create the ex-Gaussian distribution
+reaction_times <- gaussian_part + exponential_part
+
+# Plot the histogram of simulated reaction times
+hist(try$RT, breaks = 30, main = "Simulated Reaction Times (Ex-Gaussian)", xlab = "Reaction Time (ms)")
+try <- my_sim_data()
+
+try %>%
+  ggplot() +
+  geom_density(aes(x = RT, fill = as.factor(category_contrast))) +
+  #xlim(c(2000, 20000)) +
+  plot_theme
+
+model <- glmer(RT ~ 1 + category_contrast + (1 + category_contrast | subj_id), 
+               data = try, 
+               family = Gamma(link = "log"))
+
+model_try <- lmer(RT ~ 1 + category_contrast + (1 + category_contrast | subj_id), data = try)
+
+# Summary of the model
+summary(model)
+exp(6.43447 + 0.18226) - exp(6.43447)
+
+# set up the custom data simulation function
+my_sim_data <- function(
+  n_subj = 50,   # number of subjects
+  ADS_n  = 10,   # number of ingroup stimuli
+  IDS_n =  10,   # number of outgroup stimuli
+  beta_0 = 10000,   # grand mean
+  beta_1 =  2000,   # effect of category
+  omega_0 =  200,   # by-item random intercept sd
+  tau_0 = 200,   # by-subject random intercept sd
+  tau_1 =  200,   # by-subject random slope sd
+  rho = 0.2,   # correlation between intercept and slope
+  sigma = 1000) { # residual (standard deviation)
+
+  items <- data.frame(
+    item_id = seq_len(ADS_n + IDS_n),
+    category = rep(c("ADS", "IDS"), c(ADS_n, IDS_n)),
+    category_contrast = rep(c(-0.5, 0.5), c(ADS_n, IDS_n)),
+    O_0i = rnorm(n = ADS_n + IDS_n, mean = 0, sd = omega_0))
+
+  # simulate a sample of subjects
+
+# sample from a multivariate random distribution 
+  subjects <- faux::rnorm_multi(
+  n = n_subj, 
+  mu = 0, # means for random effects are always 0
+  sd = c(tau_0, tau_1), # set SDs
+  r = rho, # set correlation, see ?faux::rnorm_multi
+  varnames = c("T_0s", "T_1s"))
+
+    # add subject IDs
+  subjects$subj_id <- seq_len(n_subj) 
+
+  crossing(subjects, items) %>%
+    mutate(e_si = rnorm(nrow(.), mean = 0, sd = sigma),
+           RT = beta_0 + T_0s + O_0i + (beta_1 + T_1s) * category_contrast + e_si) %>%
+    mutate(RT = RT + rexp(nrow(.), rate = 0.001)) %>%
+    #mutate(RT = exp(RT)) %>%
+    dplyr::select(subj_id, item_id, category, category_contrast, RT)
+}
+
+
+#Use gamme distribution to generate right-skewed data! Or exponentiate the DV!!
+
+```
 
 
