@@ -226,15 +226,15 @@ Wonderful, so now we have simulated the dataset with relevant properties that we
 # set up the custom data simulation function
 SimulateData <- function(
   n_subj = 24,   # number of subjects
-  ADS_n  = 8,   # number of ingroup stimuli
-  IDS_n =  8,   # number of outgroup stimuli
+  n_ADS  = 8,   # number of ingroup stimuli
+  n_IDS =  8,   # number of outgroup stimuli
   beta_0 = 9000,   # grand mean
-  beta_1 =  2000,   # effect of category
+  beta_1 =  3000,   # effect of category
   omega_0 =  1000,   # by-item random intercept sd
-  tau_0 = 3000,   # by-subject random intercept sd
-  tau_1 =  1000,   # by-subject random slope sd
-  rho = 0.2,   # correlation between intercept and slope
-  sigma = 500) { # residual (standard deviation)
+  tau_0 = 2000,   # by-subject random intercept sd
+  tau_1 =  2500,   # by-subject random slope sd
+  rho = 0.5,   # correlation between intercept and slope
+  sigma = 200) { # residual (standard deviation)
 
   items <- data.frame(
   #item_id = seq_len(n_ADS + n_IDS),
@@ -285,24 +285,94 @@ ggplot(aes(x = Register, y = LT, fill = Register), data = dat_sim) +
   plot_theme
 ```
 
-RT ~ 1 + X_i + (1 | item_id) + (1 + X_i | subj_id)
+Let's think about how we want to run a generalised linear mixed-effects model of the data. For a varying intercepts, varying slopes model for each subject, we could run the following model with the lmer syntax as follows:
 
-* RT is the response;
-* 1 corresponds to the grand intercept (beta_0);
-* X_i is the predictor for the ingroup/outgroup manipulation for item i;
-* (1 | item_id) specifies a by-subject random intercept (O_0i);
-* (1 + X_i | subj_id) specifies a subject-specific random intercept (T_0s) plus the subject-specific random slope of category (T_1s).
+* LT ~ 1 + SpeechStyle + (1 | item_id) + (1 + SpeechStyle | subj_id)
 
-The error term (e_si) is automatically included in all models, so is left implicit. The ‘fixed’ part of the formula, RT ~ 1 + X_i, establishes the 𝑅𝑇𝑠𝑖+𝛽0+𝛽1𝑋𝑖+𝑒𝑠𝑖 part of our linear model. Every model has an intercept (𝛽0) term and residual term (𝑒𝑠𝑖
-
-) by default, so you could alternatively leave the 1 out and just write RT ~ X_i.
+In this model, LT is the response variable; 1 corresponds to the grand intercept (beta_0); SpeechStyle is the predictor for the ADS/IDS manipulation for item i; (1 | item_id) specifies a by-subject random intercept (O_0i); (1 + SpeechStyle | subj_id) specifies a subject-specific random intercept (T_0s) plus the subject-specific random slope of SpeechStyle (T_1s). The error term (e_si) is automatically included in all models, so is left implicit. 
 
 The terms in parentheses with the “pipe” separator (|) define the random effects structure. For each of these bracketed terms, the left-hand side of the pipe names the effects you wish to allow to vary and the right hand side names the variable identifying the levels of the random factor over which the terms vary (e.g., subjects or items). The first term, (1 | item_id) allows the intercept (1) to vary over the random factor of items (item_id). This is an instruction to estimate the parameter underlying the O_0i values, namely omega_0. The second term, (1 + X_i | subj_id), allows both the intercept and the effect of category (coded by X_i) to vary over the random factor of subjects (subj_id). It is an instruction to estimate the three parameters that underlie the T_0s and T_1s values, namely tau_0, tau_1, and rho.
 
-Interpreting the lmer summary
+Given that looking time data tends to be right-skewed, we can model the data using a logarithmic link function to take this into account. The GLMM would look as follows. We will use the summary() function to view the results.
 
-The other arguments to the lme4 function are the name of the data frame where the values are found (dat_sim). Because we loaded in lmerTest after lme4, the 𝑝
--values are derived using the Satterthwaite approximation, for which the default estimation technique in lmer()—restricted likelihood estimation (REML = TRUE)—is the most appropriate (Luke 2017). Use the summary() function to view the results.
+```{r}
+dataSimulated <- SimulateData()
+
+model <- glmer(LT ~ 1 + SpeechStyle + (1 | item_id) + (1 + SpeechStyle | subj_id), 
+               data = dataSimulated,
+               family = Gamma(link = "log"))
+
+summary(model)
+```
+
+Great, so now we have a way of generating data for our research question, and we have a clear idea of how we want to model the data. Now it's time to run the actual power analysis. The way we do this is to specify an effect, run a model and count how many of the models show significant effects (i.e., the ground truth).
+
+```{r}
+# simulate, analyze, and return a table of parameter estimates
+single_run <- function(...) {
+  # ... is a shortcut that forwards any arguments to 
+  # my_sim_data(), the function created above
+  dataSimulated <- SimulateData()
+  
+  model <- glmer(LT ~ 1 + SpeechStyle + (1 | item_id) + (1 + SpeechStyle | subj_id),
+                data = dataSimulated, 
+                family = Gamma(link = "log"))
+  
+  broom.mixed::tidy(model)
+}
+single_run()
+```
+
+Now we have a function to generate data, run our model and spit out the results! Now it's time to repeat a few hundred times, so that we can calculate how much power we have with our given parameters!
+
+```{r}
+# run simulations and save to a file
+n_runs <- 100 # use at least 1000 to get stable estimates
+sims <- purrr::map_df(1:n_runs, ~ single_run())
+write_csv(sims, "sims.csv")
+
+# read saved simulation data
+sims <- read_csv("sims.csv", col_types = cols(
+  # makes sure plots display in this order
+  group = col_factor(ordered = TRUE),
+  term = col_factor(ordered = TRUE)
+  ))
+
+sims %>%
+  filter(effect == "fixed") %>%
+  dplyr::select(term, estimate, p.value)
+
+# calculate mean estimates and power for specified alpha
+alpha <- 0.05
+
+sims %>% 
+  filter(effect == "fixed") %>%
+  group_by(term) %>%
+  dplyr::summarize(
+    mean_estimate = mean(estimate),
+    mean_se = mean(std.error),
+    power = mean(p.value < alpha),
+    .groups = "drop"
+  )
+```
+
+After running this model a couple of hundred times, we can converge on values for power that are > .80 - perfect for our little study on the IDS preference effect. However, we should note the limitations in this approach. There are a bunch of assumptions that went into specifying the different parameters, and we need a way to grid search through values to put the power results into perspective. We turn to this problem in the second exercise sheet, but first, let's make sure that we've understood the principles behind data simulation and power analysis.
+
+
+Exercise 1: Let's explore the effect of repeated measures on power. Try to run a power analysis with each subject receiving two items and another power analysis with each subject receiving 15 items. What happens to the estimate of statistical power?
+
+Write your answer here:
+
+______________________________________________________________________________________________________________
+
+
+
+Exercise 2: We might the IDS preference effect to change with infant age, such that older infants listen longer to IDS over ADS than younger infants. How would you add a positive interaction effect of (cross-sectional) age as a predictor to the model (hint: it involves randomly sampling age for each child and adding an effect to the simulation code and model)?
+
+_______________________________________________________________________________________________________________
+
+
+
 
 ```{r}
 dat_sim <- my_sim_data(n_subj = 30)
@@ -338,7 +408,6 @@ dat_sim %>%
 ```{r}
 dat_sim <- my_sim_data(n_subj = 50)
 meanADSRT <- mean(filter(dat_sim, category == "ADS")$RT)
-
 ```
 
 
@@ -348,70 +417,6 @@ mod_sim <- lmer(RT ~ 1 + category_contrast + (1 | item_id) + (1 + category_contr
 
 summary(mod_sim, corr = FALSE)
 ```
-
-
-
-```{r}
-# simulate, analyze, and return a table of parameter estimates
-single_run <- function(...) {
-  # ... is a shortcut that forwards any arguments to 
-  # my_sim_data(), the function created above
-  dat_sim <- my_sim_data(...)
-  mod_sim <- lmer(RT ~ category_contrast + (1 | item_id) + (1 + category_contrast | subj_id),
-                dat_sim)
-  
-  broom.mixed::tidy(mod_sim)
-}
-single_run()
-
-# run one model with new parameters
-single_run(n_subj = 200, beta_1 = 0.1)
-
-# run simulations and save to a file
-n_runs <- 100 # use at least 1000 to get stable estimates
-sims <- purrr::map_df(1:n_runs, ~ single_run())
-write_csv(sims, "sims.csv")
-
-# read saved simulation data
-sims <- read_csv("sims.csv", col_types = cols(
-  # makes sure plots display in this order
-  group = col_factor(ordered = TRUE),
-  term = col_factor(ordered = TRUE)
-  ))
-
-sims %>%
-  filter(effect == "fixed") %>%
-  dplyr::select(term, estimate, p.value)
-
-# calculate mean estimates and power for specified alpha
-alpha <- 0.05
-
-sims %>% 
-  filter(effect == "fixed") %>%
-  group_by(term) %>%
-  dplyr::summarize(
-    mean_estimate = mean(estimate),
-    mean_se = mean(std.error),
-    power = mean(p.value < alpha),
-    .groups = "drop"
-  )
-```
-
-
-Exercise 1: Let's explore the effect of repeated measures on power. Try to run a power analysis with each subject receiving two items and another power analysis with each subject receiving 15 items. What happens to the estimate of statistical power?
-
-Write your answer here:
-
-
-______________________________________________________________________________________________________________________
-
-
-
-Exercise 2: How would you add a positive effect of (cross-sectional) age as a predictor to the model (hint: it involves randomly sampling age for each child and adding an effect to the simulation code and model)?
-
-
-______________________________________________________________________________________________________________________
-
 
 
 ```{r}
@@ -507,11 +512,7 @@ try %>%
   #xlim(c(2000, 20000)) +
   plot_theme
 
-model <- glmer(RT ~ 1 + category_contrast + (1 + category_contrast | subj_id), 
-               data = try, 
-               family = Gamma(link = "log"))
 
-model_try <- lmer(RT ~ 1 + category_contrast + (1 + category_contrast | subj_id), data = try)
 
 # Summary of the model
 summary(model)
