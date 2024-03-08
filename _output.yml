@@ -1,0 +1,10 @@
+bookdown::gitbook:
+  css: style.css
+  config:
+    toc:
+      before: |
+        <li><a href="./">Workshop on Bayesian Priors</a></li>
+      after: |
+        <li><a href="https://4ccoxau.github.io/PriorsWorkshop/" target="blank"> </a></li>
+    edit: https://github.com/USERNAME/REPO/edit/BRANCH/%s
+    download: ["pdf", "epub"]
