@@ -314,9 +314,9 @@ single_run <- function(...) {
   # my_sim_data(), the function created above
   dataSimulated <- SimulateData()
   
-  model <- glmer(LT ~ 1 + SpeechStyle + (1 | item_id) + (1 + SpeechStyle | subj_id),
-                data = dataSimulated, 
-                family = Gamma(link = "log"))
+  model <- lmer(LT ~ 1 + SpeechStyle + (1 | item_id) + (1 + SpeechStyle | subj_id),
+                data = dataSimulated) 
+                #family = gaussian(link = "log"))
   
   broom.mixed::tidy(model)
 }
@@ -327,7 +327,7 @@ Now we have a function to generate data, run our model and spit out the results!
 
 ```{r}
 # run simulations and save to a file
-n_runs <- 100 # use at least 1000 to get stable estimates
+n_runs <- 100 # use at least 100 to get stable estimates
 sims <- purrr::map_df(1:n_runs, ~ single_run())
 write_csv(sims, "sims.csv")
 
@@ -367,200 +367,10 @@ ________________________________________________________________________________
 
 
 
-Exercise 2: We might the IDS preference effect to change with infant age, such that older infants listen longer to IDS over ADS than younger infants. How would you add a positive interaction effect of (cross-sectional) age as a predictor to the model (hint: it involves randomly sampling age for each child and adding an effect to the simulation code and model)?
+Exercise 2: We might expect the IDS preference effect to change with infant age, such that older infants listen longer to IDS over ADS than younger infants. How would you add a positive interaction effect of (cross-sectional) age as a predictor to the model (hint: it involves randomly sampling age for each child and adding an effect to the simulation code and model)?
 
 _______________________________________________________________________________________________________________
 
 
-
-
-```{r}
-dat_sim <- my_sim_data(n_subj = 30)
-
-dat_sim %>%
-  mutate(subj_id = as.factor(subj_id)) %>%
-  ggplot() +
-  geom_density_ridges(aes(y = reorder(subj_id, RT), x = RT, color = "black", fill = subj_id), show.legend = FALSE, quantile_lines = T, quantiles = c(0.025, 0.5, 0.975), alpha = 0.6, scale = 1.1) +
-  ggtitle('Intercept Variability by Subject') +
-  geom_vline(xintercept = 0, color = "black", size = 0.3, linetype = "dotted") +
-  xlab('DV') +
-  ylab('Subject ID') +
-  #facet_wrap(~category) +
-  scale_color_manual(values=c(viridis(n = 30))) +
-  scale_fill_manual(values=c(viridis(n = 30))) +
-  plot_theme
-
-dat_sim %>%
-  mutate(item_id = as.factor(item_id)) %>%
-  ggplot() +
-  geom_density_ridges(aes(y = reorder(item_id, RT), x = RT, color = "black", fill = item_id), show.legend = FALSE, quantile_lines = TRUE, quantiles = c(0.025, 0.5, 0.975), alpha = 0.6, scale = 1.1) +
-  ggtitle('Intercept Variability by Item') +
-  #geom_vline(xintercept = 800, color = "black", size = 0.3, linetype = "dotted") +
-  xlab('DV') +
-  ylab('Item ID') +
-  #facet_wrap(~category) +
-  scale_color_manual(values=c(viridis(n = 30))) +
-  scale_fill_manual(values=c(viridis(n = 30))) +
-  plot_theme
-```
-
-
-```{r}
-dat_sim <- my_sim_data(n_subj = 50)
-meanADSRT <- mean(filter(dat_sim, category == "ADS")$RT)
-```
-
-
-```{r}
-# fit a linear mixed-effects model to data
-mod_sim <- lmer(RT ~ 1 + category_contrast + (1 | item_id) + (1 + category_contrast | subj_id), data = dat_sim)
-
-summary(mod_sim, corr = FALSE)
-```
-
-
-```{r}
-# set up the custom data simulation function
-my_sim_data <- function(
-  n_subj = 50,   # number of subjects
-  ADS_n  = 10,   # number of ingroup stimuli
-  IDS_n =  10,   # number of outgroup stimuli
-  beta_0 = 0,   # grand mean
-  beta_1 =  0.35,   # effect of category
-  beta_as = 0.8,
-  subject_as = 0.05,
-  omega_0 =  0.1,   # by-item random intercept sd
-  tau_0 = 0.1,   # by-subject random intercept sd
-  tau_1 =  0.06,   # by-subject random slope sd
-  rho = 0.2,   # correlation between intercept and slope
-  sigma = 0.5) { # residual (standard deviation)
-
-  items <- data.frame(
-    item_id = seq_len(ADS_n + IDS_n),
-    category = rep(c("ADS", "IDS"), c(ADS_n, IDS_n)),
-    category_contrast = rep(c(-0.5, 0.5), c(ADS_n, IDS_n)),
-    O_0i = rnorm(n = ADS_n + IDS_n, mean = 0, sd = omega_0)) %>%
-    mutate(item_id = faux::make_id(nrow(.), "I"))
-
-  # simulate a sample of subjects
-
-# sample from a multivariate random distribution 
-  subjects <- faux::rnorm_multi(
-  n = n_subj, 
-  mu = 0, # means for random effects are always 0
-  sd = c(tau_0, tau_1, subject_as), # set SDs
-  r = rho, # set correlation, see ?faux::rnorm_multi
-  varnames = c("T_0s", "T_1s", "S_as")) %>%
-    mutate(subj_id = faux::make_id(nrow(.), "S")) %>%
-    mutate(X_a = runif(n_subj, min = -0.5, max = 0.5))
-#add subject age measure, sample from distribution from -0.5 to 0.5.
-  crossing(subjects, items) %>%
-    mutate(e_si = rnorm(nrow(.), mean = 0, sd = sigma),
-           RT = beta_0 + T_0s + O_0i + (beta_1 + T_1s) * category_contrast + ((beta_as + S_as) * X_a * category_contrast) + e_si) %>%
-    dplyr::select(subj_id, item_id, category, category_contrast, RT, X_a)
-}
-```
-
-```{r}
-dat_sim <- my_sim_data()
-
-dat_sim %>%
-ggplot() + 
-  geom_point(aes(y = RT, x = X_a, color = subj_id), position = "jitter", alpha = 0.6, size = 1) + 
-  geom_smooth(method = "lm", se = TRUE, formula = y ~ x, aes(y = RT, x = X_a)) +
-  ggtitle("Age") +
-  xlab("Age") + 
-  facet_wrap(~category_contrast) +
-  plot_theme
-
-dat_sim <- my_sim_data()
-mod_sim <- lmer(RT ~ 1 + category_contrast*X_a + (1 | item_id) + (1 + category_contrast | subj_id), data = dat_sim)
-summary(mod_sim, corr = FALSE)
-```
-
-
-Mixed-effects modeling is a powerful technique for analyzing data from complex designs. The technique is close to ideal for analyzing data with crossed random factors of subjects and stimuli: it gracefully and simultaneously accounts for subject and item variance within a single analysis, and outperforms traditional techniques in terms of type I error and power (Barr et al. 2013). However, this additional power comes at the price of technical complexity.
-
-Here we only considered a design with a normally distributed response variable. However, generalised linear mixed effect models allow for response variables with different distributions, such as binomial. Our supplemental online materials (https://osf.io/3cz2e/) illustrate the differences in simulation required for the study design in this paper with a binomial accuracy score (correct/incorrect) as the response variable.
-
-
-```{r}
-# Set parameters for the ex-Gaussian distribution
-mu <- 500  # Mean of the Gaussian component
-sigma <- 50  # Standard deviation of the Gaussian component
-lambda <- 0.001  # Rate parameter of the exponential component
-
-# Number of samples to generate
-n <- 1000
-
-# Generate random numbers from a Gaussian distribution
-gaussian_part <- rnorm(n, mean = mu, sd = sigma)
-
-# Generate random numbers from an exponential distribution
-exponential_part <- rexp(n, rate = lambda)
-
-# Combine the two distributions to create the ex-Gaussian distribution
-reaction_times <- gaussian_part + exponential_part
-
-# Plot the histogram of simulated reaction times
-hist(try$RT, breaks = 30, main = "Simulated Reaction Times (Ex-Gaussian)", xlab = "Reaction Time (ms)")
-try <- my_sim_data()
-
-try %>%
-  ggplot() +
-  geom_density(aes(x = RT, fill = as.factor(category_contrast))) +
-  #xlim(c(2000, 20000)) +
-  plot_theme
-
-
-
-# Summary of the model
-summary(model)
-exp(6.43447 + 0.18226) - exp(6.43447)
-
-# set up the custom data simulation function
-my_sim_data <- function(
-  n_subj = 50,   # number of subjects
-  ADS_n  = 10,   # number of ingroup stimuli
-  IDS_n =  10,   # number of outgroup stimuli
-  beta_0 = 10000,   # grand mean
-  beta_1 =  2000,   # effect of category
-  omega_0 =  200,   # by-item random intercept sd
-  tau_0 = 200,   # by-subject random intercept sd
-  tau_1 =  200,   # by-subject random slope sd
-  rho = 0.2,   # correlation between intercept and slope
-  sigma = 1000) { # residual (standard deviation)
-
-  items <- data.frame(
-    item_id = seq_len(ADS_n + IDS_n),
-    category = rep(c("ADS", "IDS"), c(ADS_n, IDS_n)),
-    category_contrast = rep(c(-0.5, 0.5), c(ADS_n, IDS_n)),
-    O_0i = rnorm(n = ADS_n + IDS_n, mean = 0, sd = omega_0))
-
-  # simulate a sample of subjects
-
-# sample from a multivariate random distribution 
-  subjects <- faux::rnorm_multi(
-  n = n_subj, 
-  mu = 0, # means for random effects are always 0
-  sd = c(tau_0, tau_1), # set SDs
-  r = rho, # set correlation, see ?faux::rnorm_multi
-  varnames = c("T_0s", "T_1s"))
-
-    # add subject IDs
-  subjects$subj_id <- seq_len(n_subj) 
-
-  crossing(subjects, items) %>%
-    mutate(e_si = rnorm(nrow(.), mean = 0, sd = sigma),
-           RT = beta_0 + T_0s + O_0i + (beta_1 + T_1s) * category_contrast + e_si) %>%
-    mutate(RT = RT + rexp(nrow(.), rate = 0.001)) %>%
-    #mutate(RT = exp(RT)) %>%
-    dplyr::select(subj_id, item_id, category, category_contrast, RT)
-}
-
-
-#Use gamme distribution to generate right-skewed data! Or exponentiate the DV!!
-
-```
 
 
